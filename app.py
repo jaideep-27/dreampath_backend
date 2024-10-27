@@ -6,12 +6,15 @@ import os
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
-CORS(app, origins=["https://jaideep-27.github.io/dreampath/"], supports_credentials=True)
+CORS(app, origins=["https://jaideep-27.github.io"], supports_credentials=True)  # Updated CORS
 
 client = Client()
 
-@app.route('/generate-path', methods=['POST'])
+@app.route('/generate-path', methods=['POST', 'OPTIONS'])
 def generate_path():
+    if request.method == 'OPTIONS':
+        return jsonify({"message": "CORS preflight check successful"}), 200  # Handle OPTIONS requests
+
     data = request.get_json()
     
     # Extract and validate incoming data
@@ -45,19 +48,17 @@ def generate_path():
         )
 
         if response.choices and response.choices[0].message.content:
-            # Split and format response content into list
             paths = response.choices[0].message.content.strip().split('\n')
             paths = [path.strip() for path in paths if path.strip()]
-            formatted_paths = '\n'.join(paths)  # Single string format for response
+            formatted_paths = '\n'.join(paths)
         else:
             return jsonify({"error": "No paths generated."}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # Store the generated paths in the session
     session['learning_paths'] = paths
-    return jsonify({"paths": formatted_paths})  # Return formatted string
+    return jsonify({"paths": formatted_paths})
 
 @app.route('/download-pdf', methods=['GET'])
 def download_pdf():
@@ -69,21 +70,22 @@ def download_pdf():
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt="Your Personalized Learning Paths", ln=True, align='C')
-    pdf.ln(10)  # Line break
+    pdf.ln(10)
 
     for i, path in enumerate(learning_paths, start=1):
         pdf.multi_cell(0, 10, txt=f"{i}. {path}")
-        pdf.ln(2)  # Space between paths
+        pdf.ln(2)
 
     pdf_file_path = "learning_path.pdf"
     pdf.output(pdf_file_path)
 
     try:
         response = send_file(pdf_file_path, as_attachment=True)
-        os.remove(pdf_file_path)  # Clean up the file
+        os.remove(pdf_file_path)
         return response
     except Exception as e:
         return jsonify({"error": f"Error sending file: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Use PORT from environment for Render.com
+    app.run(debug=True, host="0.0.0.0", port=port)
